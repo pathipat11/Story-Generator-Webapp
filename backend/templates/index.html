@@ -1,0 +1,214 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Story Generatorgi</title>
+    <script defer src="/static/app.js"></script>
+    <style>
+        body {
+            font-family: system-ui, -apple-system;
+            max-width: 1050px;
+            margin: 24px auto;
+            padding: 0 16px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        label {
+            font-size: 13px;
+            color: #444;
+            display: block;
+            margin-bottom: 6px;
+        }
+
+        input,
+        select,
+        textarea,
+        button {
+            width: 100%;
+            padding: 10px;
+            border-radius: 10px;
+            border: 1px solid #ddd;
+        }
+
+        textarea {
+            min-height: 110px;
+        }
+
+        button {
+            cursor: pointer;
+            width: auto;
+        }
+
+        .row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .panel {
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            padding: 14px;
+        }
+
+        #out {
+            white-space: pre-wrap;
+        }
+
+        .hint {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .char {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 10px;
+            align-items: end;
+            margin-bottom: 10px;
+        }
+
+        .char button {
+            padding: 10px 12px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border: 1px solid #ddd;
+            border-radius: 999px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>Story Generator (Gemini)</h2>
+
+    <div class="grid">
+        <div class="panel">
+            <h3 style="margin-top:0;">Options</h3>
+
+            <div class="grid" style="grid-template-columns: 1fr 1fr;">
+                <div>
+                    <label>Genre</label>
+                    <select id="genre">
+                        <option value="fantasy">แฟนตาซี</option>
+                        <option value="adventure">ผจญภัย</option>
+                        <option value="detective">สืบสวน</option>
+                        <option value="slice">ชีวิตประจำวัน</option>
+                        <option value="bedtime">นิทานก่อนนอน</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label>Tone</label>
+                    <select id="tone">
+                        <option value="warm">อบอุ่น</option>
+                        <option value="funny">ตลก</option>
+                        <option value="mystery">ลึกลับ</option>
+                        <option value="dark_soft">ดาร์กแบบเบา</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label>Target age</label>
+                    <select id="age">
+                        <option value="kids">เด็กเล็ก</option>
+                        <option value="preteens">เด็กโต</option>
+                        <option value="teens">วัยรุ่น</option>
+                        <option value="adult">ผู้ใหญ่</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label>Length</label>
+                    <select id="length">
+                        <option value="short">สั้น</option>
+                        <option value="medium">กลาง</option>
+                        <option value="long">ยาว</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="margin-top:12px;">
+                <label>Setting</label>
+                <input id="setting" value="หมู่บ้านเล็กๆใกล้ป่า" />
+            </div>
+
+            <div style="margin-top:12px;">
+                <label>Theme / Moral direction</label>
+                <input id="theme" value="มิตรภาพและความพยายาม" />
+            </div>
+
+            <div style="margin-top:12px;">
+                <div class="row" style="justify-content: space-between;">
+                    <label style="margin:0;">Characters</label>
+                    <button id="addChar" type="button">+ Add character</button>
+                </div>
+                <div id="chars"></div>
+                <div class="hint">เพิ่มได้หลายคน เช่น ตัวเอก/เพื่อน/ตัวร้าย</div>
+            </div>
+
+            <div style="margin-top:12px;">
+                <label>Relationships (optional)</label>
+                <textarea id="rels"
+                    placeholder="เช่น มะลิเป็นเพื่อนกับต้นน้ำ / ตัวร้ายชื่อควันดำอยากได้ของวิเศษ..."></textarea>
+            </div>
+
+            <div class="row" style="margin-top:12px;">
+                <label style="display:flex; gap:10px; align-items:center; margin:0;">
+                    <input id="wantImgPrompt" type="checkbox" checked style="width:auto;" />
+                    สร้าง prompt สำหรับภาพประกอบ (1 รูป)
+                </label>
+                <span class="badge" id="storyBadge">story_id: -</span>
+            </div>
+
+            <div style="margin-top:12px;">
+                <label>Story idea</label>
+                <textarea id="idea" placeholder="พิมพ์พล็อต/เหตุการณ์ที่อยากให้เกิดในเรื่อง..."></textarea>
+            </div>
+
+            <div class="row" style="margin-top:12px;">
+                <button id="gen" type="button">Generate story</button>
+                <button id="next" type="button" disabled>Next chapter</button>
+                <input id="dir" placeholder="แนวทางตอนถัดไป (optional)" />
+            </div>
+
+            <div class="row" style="margin-top:12px;">
+                <button id="dlMd" type="button" disabled>Download .md</button>
+                <button id="dlTxt" type="button" disabled>Download .txt</button>
+                <button id="dlPdf" type="button" disabled>Download .pdf</button>
+            </div>
+
+            <div class="hint" style="margin-top:10px;">
+                ถ้าโดน 429 (rate limit) ให้รอสักครู่แล้วลองใหม่
+            </div>
+        </div>
+
+        <div class="panel">
+            <h3 style="margin-top:0;">Output</h3>
+            <div id="out" class="hint">กด Generate เพื่อสร้างนิทานครับ</div>
+
+            <div style="margin-top:12px;">
+                <h4 style="margin: 12px 0 6px;">Illustration Prompt</h4>
+                <div id="imgPrompt" class="hint">(ยังไม่มี)</div>
+            </div>
+
+            <div style="margin-top:12px;">
+                <h4 style="margin: 12px 0 6px;">Chapters</h4>
+                <div id="chapters" class="hint">(ยังไม่มี)</div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
