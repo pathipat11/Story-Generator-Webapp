@@ -106,3 +106,13 @@ def story_markdown(story: Dict[str, Any], chapters: List[Dict[str, Any]]) -> str
             lines.append(f"\n### Chapter {ch['index']}: {ch['title']}\n")
             lines.append(ch["text"].strip())
     return "\n".join(lines)
+
+def list_stories(limit: int = 50):
+    with _conn() as con:
+        cur = con.cursor()
+        cur.execute(
+            "SELECT id, created_at, title FROM stories ORDER BY id DESC LIMIT ?",
+            (limit,)
+        )
+        rows = cur.fetchall()
+        return [{"id": r[0], "created_at": r[1], "title": r[2]} for r in rows]

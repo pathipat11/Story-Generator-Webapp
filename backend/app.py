@@ -1,4 +1,5 @@
-import re
+import re, time
+from pathlib import Path
 from typing import List, Optional, Dict, Any
 
 from fastapi import FastAPI, Request
@@ -9,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from google.genai.errors import ClientError, ServerError
 
-from gemini_client import generate_text
+from gemini_client import generate_text, generate_image_png_bytes
 from prompts import (
     SYSTEM_RULES,
     OUTPUT_FORMAT_FIRST,
@@ -20,18 +21,31 @@ from prompts import (
 import storage
 from pdf_utils import text_to_pdf_bytes
 
+
+# ---------------------------
+# App setup
+# ---------------------------
 app = FastAPI()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 DEFAULT_MODEL = "gemini-2.5-flash"
+IMAGE_MODEL = "gemini-2.5-flash-image"
+
+GENERATED_DIR = Path("static/generated")
+GENERATED_DIR.mkdir(parents=True, exist_ok=True)
 
 storage.init_db()
 
+
+# ---------------------------
+# Models (Request bodies)
+# ---------------------------
 class Character(BaseModel):
     name: str
     traits: str = ""
+
 
 class StoryBody(BaseModel):
     idea: str = Field(..., description="Free text plot / requirements")
@@ -44,25 +58,35 @@ class StoryBody(BaseModel):
     theme: str = "มิตรภาพและความพยายาม"
 
     characters: List[Character] = Field(default_factory=list)
-    relationships: str = ""  # free text
+    relationships: str = ""
     want_illustration_prompt: bool = True
+
 
 class NextBody(BaseModel):
     story_id: int
-    user_direction: str = ""  # ผู้ใช้สั่งเพิ่มสำหรับตอนถัดไป (optional)
+    user_direction: str = ""
 
+
+class IllustrateBody(BaseModel):
+    story_id: int
+    aspect_ratio: str = "3:4"
+
+
+# ---------------------------
+# Helpers
+# ---------------------------
 def _safe_map(d: Dict[str, str], key: str, default: str) -> str:
     return d.get(key, default)
 
+
 def _extract_title(full_text: str) -> str:
-    # หา [Title] ... บรรทัดถัดไป
     m = re.search(r"\[Title\]\s*\n(.+)", full_text)
     if m:
         return m.group(1).strip()[:120]
     return "Untitled Story"
 
+
 def _parse_next_chapter(text: str):
-    # [Chapter Title] ... [Chapter] ... [Cliffhanger] ...
     title = ""
     chapter = text.strip()
     m = re.search(r"\[Chapter Title\]\s*\n(.+)", text)
@@ -70,12 +94,40 @@ def _parse_next_chapter(text: str):
         title = m.group(1).strip()
     return title or "Next Chapter", chapter
 
-@app.get("/", response_class=HTMLResponse)
-def home(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
 
-@app.post("/generate")
-def generate_story(body: StoryBody):
+def _slug_filename(title: str, story_id: int) -> str:
+    filename_base = re.sub(r"[^a-zA-Z0-9ก-๙ _-]+", "", title).strip() or f"story_{story_id}"
+    return filename_base[:80]
+
+
+# ---------------------------
+# Pages (HTML)
+# ---------------------------
+@app.get("/", response_class=HTMLResponse)
+def page_home(request: Request):
+    return templates.TemplateResponse("home.html", {"request": request, "title": "Home"})
+
+
+@app.get("/create", response_class=HTMLResponse)
+def page_create(request: Request):
+    return templates.TemplateResponse("create.html", {"request": request, "title": "Create"})
+
+
+@app.get("/stories", response_class=HTMLResponse)
+def page_stories(request: Request):
+    return templates.TemplateResponse("stories.html", {"request": request, "title": "Stories"})
+
+
+@app.get("/story/{story_id}", response_class=HTMLResponse)
+def page_story(request: Request, story_id: int):
+    return templates.TemplateResponse("story.html", {"request": request, "title": "Story", "story_id": story_id})
+
+
+# ---------------------------
+# API (JSON)
+# ---------------------------
+@app.post("/api/generate")
+def api_generate_story(body: StoryBody):
     idea = (body.idea or "").strip()
     if not idea:
         return JSONResponse({"error": "กรุณาพิมพ์ไอเดียหรือพล็อตที่ต้องการก่อนครับ"}, status_code=400)
@@ -149,7 +201,7 @@ User idea:
 
         story_id = storage.create_story(options_for_store, title, full_text, illustration_prompt)
 
-        # chapter 1 = เนื้อเรื่องหลักที่สร้างครั้งแรก
+        # เก็บ chapter 1
         storage.add_chapter(story_id, 1, "Chapter 1", full_text)
 
         return {
@@ -169,15 +221,15 @@ User idea:
     except Exception as e:
         return JSONResponse({"error": f"Server error: {repr(e)}"}, status_code=500)
 
-@app.post("/next")
-def next_chapter(body: NextBody):
+
+@app.post("/api/next")
+def api_next_chapter(body: NextBody):
     story = storage.get_story(body.story_id)
     if not story:
         return JSONResponse({"error": "ไม่พบ story_id นี้"}, status_code=404)
 
     chapters = storage.list_chapters(body.story_id)
     next_index = (chapters[-1]["index"] + 1) if chapters else 2
-
     user_dir = (body.user_direction or "").strip()
 
     prompt = f"""{SYSTEM_RULES}
@@ -192,6 +244,7 @@ def next_chapter(body: NextBody):
 [User direction for next chapter]
 {user_dir or "(none)"}
 """
+
     try:
         text = generate_text(DEFAULT_MODEL, prompt)
         ch_title, ch_text = _parse_next_chapter(text)
@@ -203,14 +256,61 @@ def next_chapter(body: NextBody):
             return JSONResponse({"error": "429 Rate limit: รอสักครู่แล้วลองใหม่ครับ"}, status_code=429)
         return JSONResponse({"error": f"{type(e).__name__}: {s}"}, status_code=500)
 
-@app.get("/story/{story_id}")
-def get_story(story_id: int):
+
+@app.get("/api/story/{story_id}")
+def api_get_story(story_id: int):
     story = storage.get_story(story_id)
     if not story:
         return JSONResponse({"error": "not found"}, status_code=404)
     chapters = storage.list_chapters(story_id)
     return {"story": story, "chapters": chapters}
 
+
+@app.get("/api/stories")
+def api_list_stories():
+    return {"items": storage.list_stories(60)}
+
+
+@app.post("/api/illustrate")
+def api_illustrate(body: IllustrateBody):
+    story = storage.get_story(body.story_id)
+    if not story:
+        return JSONResponse({"error": "ไม่พบ story_id นี้"}, status_code=404)
+
+    base_prompt = (story.get("illustration_prompt") or "").strip()
+    if not base_prompt:
+        base_prompt = f"Anime key visual illustration for the story titled: {story['title']}"
+
+    anime_suffix = """
+Style: high quality anime key visual, cel shading, detailed eyes, clean line art,
+cinematic lighting, vibrant colors, depth of field, masterpiece, no text, no watermark, no logo.
+Composition: main characters in the center, background matches the setting.
+"""
+
+    final_prompt = f"{base_prompt}\n\n{anime_suffix}"
+
+    try:
+        png_bytes = generate_image_png_bytes(
+            model=IMAGE_MODEL,
+            prompt=final_prompt,
+            aspect_ratio=body.aspect_ratio,
+        )
+        ts = int(time.time())
+        filename = f"story_{body.story_id}_{ts}.png"
+        path = GENERATED_DIR / filename
+        path.write_bytes(png_bytes)
+        return {"image_url": f"/static/generated/{filename}"}
+
+    except Exception as e:
+        s = str(e)
+        if "429" in s or "RESOURCE_EXHAUSTED" in s:
+            return JSONResponse({"error": "429 Rate limit: รอสักครู่แล้วลองใหม่ครับ"}, status_code=429)
+        return JSONResponse({"error": f"{type(e).__name__}: {s}"}, status_code=500)
+
+
+# ---------------------------
+# Downloads (file responses)
+# ---------------------------
 @app.get("/download/{story_id}.{ext}")
 def download(story_id: int, ext: str):
     story = storage.get_story(story_id)
@@ -220,8 +320,7 @@ def download(story_id: int, ext: str):
     chapters = storage.list_chapters(story_id)
     md = storage.story_markdown(story, chapters)
 
-    filename_base = re.sub(r"[^a-zA-Z0-9ก-๙ _-]+", "", story["title"]).strip() or f"story_{story_id}"
-    filename_base = filename_base[:80]
+    filename_base = _slug_filename(story["title"], story_id)
 
     if ext == "md":
         return Response(
