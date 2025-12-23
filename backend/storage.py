@@ -116,3 +116,13 @@ def list_stories(limit: int = 50):
         )
         rows = cur.fetchall()
         return [{"id": r[0], "created_at": r[1], "title": r[2]} for r in rows]
+
+def delete_story(story_id: int) -> bool:
+    conn = _conn()
+    cur = conn.cursor()
+
+    cur.execute("DELETE FROM chapters WHERE story_id = ?", (story_id,))
+    cur.execute("DELETE FROM stories WHERE id = ?", (story_id,))
+    conn.commit()
+
+    return cur.rowcount > 0

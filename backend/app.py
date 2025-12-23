@@ -2,7 +2,7 @@ import re, time
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -53,6 +53,7 @@ class StoryBody(BaseModel):
     tone: str = "warm"
     length: str = "short"
     age: str = "kids"
+    outline: str = ""
 
     setting: str = "หมู่บ้านเล็กๆใกล้ป่า"
     theme: str = "มิตรภาพและความพยายาม"
@@ -70,6 +71,16 @@ class NextBody(BaseModel):
 class IllustrateBody(BaseModel):
     story_id: int
     aspect_ratio: str = "3:4"
+
+class OutlineBody(BaseModel):
+    idea: str
+    genre: str = "fantasy"
+    tone: str = "warm"
+    length: str = "short"
+    age: str = "kids"
+    setting: str = ""
+    theme: str = ""
+    characters: List[Character] = Field(default_factory=list)
 
 
 # ---------------------------
@@ -153,6 +164,7 @@ def api_generate_story(body: StoryBody):
         "characters": [c.model_dump() for c in chars],
         "relationships": body.relationships.strip(),
     }
+    outline_block = (body.outline or "").strip()
 
     prompt = f"""{SYSTEM_RULES}
 {OUTPUT_FORMAT_FIRST}
@@ -171,6 +183,9 @@ Characters:
 
 Relationships (if any):
 {body.relationships.strip() or "(none)"}
+
+[Outline]
+{outline_block if outline_block else "(no outline provided)"}
 
 [User idea]
 {idea}
@@ -307,6 +322,12 @@ Composition: main characters in the center, background matches the setting.
             return JSONResponse({"error": "429 Rate limit: รอสักครู่แล้วลองใหม่ครับ"}, status_code=429)
         return JSONResponse({"error": f"{type(e).__name__}: {s}"}, status_code=500)
 
+@app.delete("/api/story/{story_id}")
+def api_delete_story(story_id: int):
+    ok = storage.delete_story(story_id)
+    if not ok:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return {"ok": True}
 
 # ---------------------------
 # Downloads (file responses)
@@ -346,3 +367,53 @@ def download(story_id: int, ext: str):
         )
 
     return JSONResponse({"error": "ext must be md|txt|pdf"}, status_code=400)
+
+
+@app.post("/api/outline")
+def api_outline(body: OutlineBody):
+    idea = (body.idea or "").strip()
+    if not idea:
+        return JSONResponse({"error": "กรุณาพิมพ์ไอเดียก่อนครับ"}, status_code=400)
+
+    genre = _safe_map(GENRE_GUIDE, body.genre, "แฟนตาซี")
+    tone = _safe_map(TONE_GUIDE, body.tone, "อบอุ่น ให้กำลังใจ")
+    length = _safe_map(LENGTH_GUIDE, body.length, "ประมาณ 300-500 คำ")
+    age = _safe_map(AGE_GUIDE, body.age, "เด็กเล็ก")
+
+    chars = body.characters or []
+    char_block = "\n".join([f"- {c.name}: {c.traits}".strip() for c in chars]) or "(none)"
+
+    prompt = f"""
+You are a story planner.
+Write a clear outline in Thai with bullets and short lines.
+
+[Options]
+Genre: {genre}
+Tone: {tone}
+Target age: {age}
+Length: {length}
+Setting: {body.setting or "(not specified)"}
+Theme: {body.theme or "(not specified)"}
+
+Characters:
+{char_block}
+
+[User idea]
+{idea}
+
+[Output]
+- Title idea:
+- Main conflict:
+- Key scenes (3-6 scenes):
+- Ending:
+- Moral:
+"""
+
+    try:
+        outline_text = generate_text(DEFAULT_MODEL, prompt)
+        return {"outline": (outline_text or "").strip()}
+    except Exception as e:
+        s = str(e)
+        if "429" in s or "RESOURCE_EXHAUSTED" in s:
+            return JSONResponse({"error": "429 Rate limit: รอสักครู่แล้วลองใหม่ครับ"}, status_code=429)
+        return JSONResponse({"error": f"{type(e).__name__}: {s}"}, status_code=500)

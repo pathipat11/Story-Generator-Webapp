@@ -70,6 +70,49 @@
         </div>
     </div>
 
+    <!-- Presets -->
+    <div class="mt-5">
+        <h3 class="text-sm font-semibold">Preset templates</h3>
+        <div class="mt-2 flex flex-wrap gap-2">
+            <button type="button" data-preset="bedtime"
+                class="preset rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900">
+                นิทานก่อนนอน
+            </button>
+            <button type="button" data-preset="adventure"
+                class="preset rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900">
+                ผจญภัย
+            </button>
+            <button type="button" data-preset="mystery"
+                class="preset rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900">
+                สืบสวน
+            </button>
+            <button type="button" data-preset="slice"
+                class="preset rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900">
+                ชีวิตประจำวัน
+            </button>
+        </div>
+        <p class="mt-2 text-xs text-slate-500 dark:text-slate-400">กดแล้วจะเติมค่า Genre/Tone/Setting/Theme
+            และตัวละครตัวอย่างให้</p>
+    </div>
+
+    <!-- Outline -->
+    <div class="mt-5">
+        <div class="flex items-center justify-between">
+            <h3 class="text-sm font-semibold">Outline (แนะนำให้สร้างก่อน)</h3>
+            <button id="genOutline" type="button"
+                class="rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200">
+                Generate outline
+            </button>
+        </div>
+
+        <textarea id="outline" placeholder="(ยังไม่มี) กด Generate outline เพื่อให้ AI วางโครงเรื่องก่อน แล้วแก้เองได้"
+            class="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+            rows="6"></textarea>
+
+        <p class="mt-2 text-xs text-slate-500 dark:text-slate-400">
+            เมื่อมี outline แล้ว ระบบจะใช้ outline นี้ตอน Generate story ทำให้คุมทิศทางเรื่องง่ายขึ้น
+        </p>
+    </div>
 
     <div class="mt-5">
         <div class="flex items-center justify-between">

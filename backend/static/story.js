@@ -27,11 +27,10 @@ function renderChapters(chapters) {
         const wrap = document.createElement("div");
         wrap.className = "rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950";
         wrap.innerHTML = `
-      <div class="flex flex-wrap items-center gap-2">
-        <span class="inline-flex rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-300">Chapter ${ch.index}</span>
-        <span class="text-sm font-semibold text-slate-900 dark:text-slate-100">${ch.title}</span>
-      </div>
-      <pre class="mt-3 whitespace-pre-wrap font-sans text-sm text-slate-700 dark:text-slate-200"></pre>
+            <div class="flex flex-wrap items-center gap-2">
+                <span class="inline-flex rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-300">Chapter ${ch.index}</span>
+                <span class="text-sm font-semibold text-slate-900 dark:text-slate-100">${ch.title}</span>
+            </div><pre class="mt-3 whitespace-pre-wrap font-sans text-sm text-slate-700 dark:text-slate-200"></pre>
     `;
         wrap.querySelector("pre").textContent = ch.text;
         chaptersEl.appendChild(wrap);
@@ -58,7 +57,7 @@ nextBtn.addEventListener("click", async () => {
     isBusy = true;
     nextBtn.disabled = true;
     try {
-        const res = await fetch("/next", {
+        const res = await fetch("/api/next", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ story_id: storyId, user_direction: dirInput.value }),
