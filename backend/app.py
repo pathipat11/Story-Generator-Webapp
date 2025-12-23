@@ -1,6 +1,7 @@
 import re, time
 from pathlib import Path
 from typing import List, Optional, Dict, Any
+from urllib.parse import quote
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, Response
@@ -332,6 +333,15 @@ def api_delete_story(story_id: int):
 # ---------------------------
 # Downloads (file responses)
 # ---------------------------
+
+def content_disposition(filename_ascii: str, filename_utf8: str) -> str:
+    # filename (ascii fallback) + filename* (utf-8)
+    return f"attachment; filename={filename_ascii}; filename*=UTF-8''{quote(filename_utf8)}"
+
+def _ascii_filename(story_id: int, ext: str) -> str:
+    return f"story_{story_id}.{ext}"
+
+
 @app.get("/download/{story_id}.{ext}")
 def download(story_id: int, ext: str):
     story = storage.get_story(story_id)
@@ -341,32 +351,28 @@ def download(story_id: int, ext: str):
     chapters = storage.list_chapters(story_id)
     md = storage.story_markdown(story, chapters)
 
-    filename_base = _slug_filename(story["title"], story_id)
+    # ชื่อจริง (อาจมีไทย)
+    nice_base = _slug_filename(story["title"], story_id)
+    nice_name = f"{nice_base}.{ext}"
+
+    # ชื่อ fallback (ASCII เท่านั้น)
+    safe_name = _ascii_filename(story_id, ext)
+
+    headers = {"Content-Disposition": content_disposition(safe_name, nice_name)}
 
     if ext == "md":
-        return Response(
-            content=md.encode("utf-8"),
-            media_type="text/markdown; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="{filename_base}.md"'},
-        )
+        return Response(md.encode("utf-8"), media_type="text/markdown; charset=utf-8", headers=headers)
 
     if ext == "txt":
         txt = md.replace("# ", "").replace("## ", "").replace("### ", "")
-        return Response(
-            content=txt.encode("utf-8"),
-            media_type="text/plain; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="{filename_base}.txt"'},
-        )
+        return Response(txt.encode("utf-8"), media_type="text/plain; charset=utf-8", headers=headers)
 
     if ext == "pdf":
         pdf_bytes = text_to_pdf_bytes(story["title"], md)
-        return Response(
-            content=pdf_bytes,
-            media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="{filename_base}.pdf"'},
-        )
+        return Response(pdf_bytes, media_type="application/pdf", headers=headers)
 
     return JSONResponse({"error": "ext must be md|txt|pdf"}, status_code=400)
+
 
 
 @app.post("/api/outline")
